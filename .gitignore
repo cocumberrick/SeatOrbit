@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+
+# Local project snapshots and one-off development patches are not deployable assets.
+project-dump.txt
+dump-project.mjs
+sunken-field.patch
