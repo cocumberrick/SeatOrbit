@@ -1,8 +1,8 @@
-# Canada Life Centre — Interactive 3D Arena
+# SeatOrbit — Interactive 3D Venue Platform
 
-An interactive browser-based 3D exploration of Canada Life Centre in Winnipeg, home of the Winnipeg Jets. Visitors can explore the arena, inspect sections and seats, and follow an external ticket link when one is configured.
+SeatOrbit is an independent browser-based platform for exploring arenas in interactive 3D and browsing seats. Canada Life Centre in Winnipeg is its first demonstration venue. Visitors can explore sections, inspect seats, preview seat views, and follow an external ticket link when one is configured.
 
-This is a fan-made visual model, not an official Canada Life Centre product or a surveyed architectural model. Arena dimensions, seat positions, and ticket estimates are illustrative and may differ from the real venue.
+The Canada Life Centre model is a fan-made demonstration, not an official venue product or a surveyed architectural model. Arena dimensions, seat positions, and ticket estimates are illustrative and may differ from the real venue.
 
 ## Technology
 
@@ -77,4 +77,10 @@ The adapter is in `src/services/ticketmasterClient.js`; its functions are `searc
 
 ## Ticketing and project disclaimer
 
-This project is not an official box office, does not sell or reserve tickets, and is not affiliated with or endorsed by Canada Life Centre, True North Sports + Entertainment, the NHL, or the Winnipeg Jets. Ticket transactions, final prices, fees, event details, and seat availability are controlled by the external ticket operator.
+SeatOrbit is not the official box office of Canada Life Centre or the Winnipeg Jets. It does not sell or reserve tickets and is not affiliated with or endorsed by Canada Life Centre, True North Sports + Entertainment, the NHL, or the Winnipeg Jets. Ticket transactions, final prices, fees, event details, and seat availability are handled by the external ticket operator.
+
+## Copyright and source license
+
+© 2026 Danylo Marushchak. All rights reserved.
+
+SeatOrbit's original source code and project assets are not released under an open-source license. Third-party dependencies remain subject to their own licenses, as recorded in `package-lock.json`.

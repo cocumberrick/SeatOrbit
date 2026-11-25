@@ -40,7 +40,6 @@ jobs:
       - name: Build site
         run: npm run build
         env:
-          VITE_BASE_PATH: ${{ vars.VITE_BASE_PATH }}
           VITE_TICKETMASTER_API_KEY: ${{ secrets.VITE_TICKETMASTER_API_KEY }}
           VITE_TICKETMASTER_EVENT_ID: ${{ vars.VITE_TICKETMASTER_EVENT_ID }}
           VITE_TICKETMASTER_VENUE_ID: ${{ vars.VITE_TICKETMASTER_VENUE_ID }}

@@ -33,7 +33,7 @@ export function createUI(args) {
 
   const brand = document.createElement('div');
   brand.className = 'brand';
-  brand.innerHTML = 'Canada Life <span>Centre</span>';
+  brand.innerHTML = '<span class="brand__platform">SeatOrbit</span><span class="brand__separator" aria-hidden="true">·</span><span class="brand__venue">Canada Life Centre</span><span class="brand__location">Winnipeg</span>';
   toolbar.appendChild(brand);
 
   const buttons = {};
@@ -221,7 +221,7 @@ export function createUI(args) {
   const info = document.createElement('div');
   info.id = 'info-panel';
   info.innerHTML = `
-    <h3>Canada Life Centre — Winnipeg, MB</h3>
+    <h3>SeatOrbit · Canada Life Centre, Winnipeg</h3>
     <p><span class="tag">NHL</span> Home of the Winnipeg Jets · ${formatCapacity(ARENA_FACTS.capacity)} seats</p>
     <p><span class="tag">ARENA</span> Opened ${ARENA_FACTS.opened} · ${ARENA_FACTS.levels.join(' / ')} levels</p>
     <p><span class="tag">TIP</span> Click a seat to see its view and estimated ticket price. Press Esc to step back.</p>

@@ -33,12 +33,29 @@ export class BookingUI {
     this.currentSeat = null;
     this.panelOpen = false;
     this._uploading = false;
+    this._seatCardCollapsed = false;
+    this._seatCardCollapsing = false;
+    this._seatCardTransitionTimer = null;
+    this._seatCardTransitionHandler = null;
 
     this.root = document.createElement('div');
     this.root.className = 'booking-root';
 
     this.seatCard = this.buildSeatCard();
+    this.seatCard.element.id = 'selected-seat-card';
     this.root.appendChild(this.seatCard.element);
+
+    this.seatRestoreButton = document.createElement('button');
+    this.seatRestoreButton.type = 'button';
+    this.seatRestoreButton.className = 'seat-card-restore';
+    this.seatRestoreButton.textContent = '•••';
+    this.seatRestoreButton.setAttribute('aria-label', 'Show selected seat details');
+    this.seatRestoreButton.setAttribute('aria-controls', this.seatCard.element.id);
+    this.seatRestoreButton.setAttribute('aria-expanded', 'true');
+    this.seatRestoreButton.setAttribute('aria-hidden', 'true');
+    this.seatRestoreButton.tabIndex = -1;
+    this.seatRestoreButton.addEventListener('click', () => this.expandSeatCard());
+    this.root.appendChild(this.seatRestoreButton);
 
     this.sectionCard = this.buildSectionCard();
     this.root.appendChild(this.sectionCard.element);
@@ -55,9 +72,18 @@ export class BookingUI {
 
     this.sectionTooltip = this.buildSectionTooltip();
 
+    this.hintText = '';
+    this.viewHint = document.createElement('div');
+    this.viewHint.className = 'view-hint';
+    this.viewHint.setAttribute('role', 'status');
+    this.viewHint.setAttribute('aria-live', 'polite');
+    this.viewHint.hidden = true;
+    this.container.classList.remove('has-collapsed-seat-card');
+
     container.appendChild(this.root);
     container.appendChild(this.toast);
     container.appendChild(this.sectionTooltip);
+    container.appendChild(this.viewHint);
     document.body.appendChild(this.aboutDialog.element);
   }
 
@@ -71,16 +97,17 @@ export class BookingUI {
     backdrop.innerHTML = `
       <section class="about-dialog" role="dialog" aria-modal="true" aria-labelledby="about-title" aria-describedby="about-copy">
         <button class="about-dialog__close" type="button" aria-label="Close About">&times;</button>
-        <p class="about-dialog__eyebrow">Canada Life Centre · Winnipeg, Manitoba</p>
-        <h2 id="about-title">Explore the arena</h2>
-        <p id="about-copy">An interactive 3D exploration of Canada Life Centre, home of the Winnipeg Jets. Browse the arena, choose a section and seat, and look around from a seat-level viewpoint.</p>
+        <p class="about-dialog__eyebrow">SeatOrbit · Canada Life Centre, Winnipeg</p>
+        <h2 id="about-title">Explore the arena in 3D</h2>
+        <p id="about-copy">SeatOrbit is an independent interactive 3D platform for exploring arenas and browsing seats. Canada Life Centre in Winnipeg is our first demonstration venue. Explore sections, select a seat, and preview its view.</p>
         <div class="about-dialog__grid">
           <article><h3>Views</h3><p>Arena Overview, Exterior View, and Ice Level with a 360° view from above the ice. Walk / Jump Mode is available on desktop.</p></article>
           <article><h3>Make it yours</h3><p>Switch between Jets Classic and Cyber Neon, then choose Lite, Standard, or Ultra to balance visual detail and performance.</p></article>
           <article><h3>Fan Flags</h3><p>Add a photo flag to a selected seat. Flags are saved in this browser on this device and remain visible in Lite mode. ${paymentDescription}</p></article>
         </div>
-        <p class="about-dialog__disclaimer"><strong>Payment and ticketing notice:</strong> This project is not an official box office and does not sell or reserve tickets. Official ticket purchases use third-party ticket operators. Fan-flag payment, when configured, opens external Stripe Checkout. The browser-only project does not verify Stripe payments or provide server-backed fulfillment; saved fan photos stay on this device. Seat prices are estimates; confirm event, price, fees, and availability with the ticket operator.</p>
-        <p class="about-dialog__footnote">An independent fan experience. Not affiliated with or endorsed by Canada Life Centre, True North Sports + Entertainment, the NHL, or the Winnipeg Jets.</p>
+        <p class="about-dialog__disclaimer"><strong>Payment and ticketing notice:</strong> SeatOrbit is not the official box office of Canada Life Centre or the Winnipeg Jets and does not sell or reserve tickets. Ticket purchases are completed through external ticket operators. Fan flags, when configured, use an external Stripe Payment Link; this browser-only platform cannot verify payments or provide server-backed fulfillment. Saved fan photos remain in this browser. Seat prices are estimates; confirm event details, price, fees, and availability with the ticket operator.</p>
+        <p class="about-dialog__copyright">© 2026 Danylo Marushchak. All rights reserved.</p>
+        <p class="about-dialog__footnote">SeatOrbit is an independent project and is not affiliated with or endorsed by Canada Life Centre, True North Sports + Entertainment, the NHL, or the Winnipeg Jets.</p>
       </section>
     `;
     const closeButton = backdrop.querySelector('.about-dialog__close');
@@ -228,7 +255,7 @@ export class BookingUI {
 
     const self = this;
     element.querySelector('.seat-card__close').addEventListener('click', function () {
-      self.handlers.onCloseSeatCard();
+      self.collapseSeatCard();
     });
     fields.tickets.addEventListener('click', function (event) {
       if (!fields.tickets.getAttribute('href')) {
@@ -243,6 +270,7 @@ export class BookingUI {
   }
 
   showSeatCard(info) {
+    const shouldExpand = this._seatCardCollapsed || this.seatCard.element.classList.contains('is-collapsing');
     this.hideSectionCard();
     const f = this.seatCard.fields;
     this.currentSeat = info;
@@ -267,12 +295,147 @@ export class BookingUI {
 
     this.seatCard.element.classList.add('is-visible');
     this.seatCard.element.setAttribute('aria-hidden', 'false');
+    if (shouldExpand) this.expandSeatCard();
+    this.updateHintVisibility();
   }
 
   hideSeatCard() {
+    this.cancelSeatCardTransition();
+    this._seatCardCollapsed = false;
+    this._seatCardCollapsing = false;
     this.currentSeat = null;
     this.seatCard.element.classList.remove('is-visible');
+    this.seatCard.element.classList.remove('is-collapsing', 'is-expanding');
+    this.seatCard.element.style.removeProperty('--seat-collapse-x');
+    this.seatCard.element.style.removeProperty('--seat-collapse-y');
+    this.seatCard.element.style.removeProperty('--seat-collapse-sx');
+    this.seatCard.element.style.removeProperty('--seat-collapse-sy');
     this.seatCard.element.setAttribute('aria-hidden', 'true');
+    this.seatRestoreButton.classList.remove('is-visible');
+    this.seatRestoreButton.setAttribute('aria-expanded', 'true');
+    this.seatRestoreButton.setAttribute('aria-hidden', 'true');
+    this.seatRestoreButton.tabIndex = -1;
+    this.container.classList.remove('has-collapsed-seat-card');
+    this.updateHintVisibility();
+  }
+
+  collapseSeatCard() {
+    const element = this.seatCard.element;
+    if (!this.currentSeat || !element.classList.contains('is-visible') || this._seatCardCollapsed || this._seatCardCollapsing) return;
+
+    const cardRect = element.getBoundingClientRect();
+    const targetRect = this.seatRestoreButton.getBoundingClientRect();
+    element.style.setProperty('--seat-collapse-x', (targetRect.left - cardRect.left) + 'px');
+    element.style.setProperty('--seat-collapse-y', (targetRect.top - cardRect.top) + 'px');
+    element.style.setProperty('--seat-collapse-sx', String(targetRect.width / Math.max(cardRect.width, 1)));
+    element.style.setProperty('--seat-collapse-sy', String(targetRect.height / Math.max(cardRect.height, 1)));
+
+    this._seatCardCollapsing = true;
+    this.seatRestoreButton.classList.add('is-visible');
+    this.seatRestoreButton.setAttribute('aria-expanded', 'false');
+    this.seatRestoreButton.setAttribute('aria-hidden', 'false');
+    this.seatRestoreButton.tabIndex = 0;
+    element.classList.add('is-collapsing');
+    element.setAttribute('aria-hidden', 'true');
+    this.seatRestoreButton.focus({ preventScroll: true });
+    this.updateHintVisibility();
+
+    const finish = (event) => {
+      if (event && (event.target !== element || event.propertyName !== 'transform')) return;
+      this.finishSeatCardCollapse();
+    };
+    this._seatCardTransitionHandler = finish;
+    element.addEventListener('transitionend', finish);
+    this._seatCardTransitionTimer = window.setTimeout(() => finish(), 430);
+  }
+
+  finishSeatCardCollapse() {
+    if (!this._seatCardCollapsing) return;
+    this.cancelSeatCardTransition();
+    this._seatCardCollapsing = false;
+    this._seatCardCollapsed = true;
+    this.seatCard.element.classList.remove('is-collapsing', 'is-visible');
+    this.seatCard.element.setAttribute('aria-hidden', 'true');
+    this.seatCard.element.style.removeProperty('--seat-collapse-x');
+    this.seatCard.element.style.removeProperty('--seat-collapse-y');
+    this.seatCard.element.style.removeProperty('--seat-collapse-sx');
+    this.seatCard.element.style.removeProperty('--seat-collapse-sy');
+    this.container.classList.add('has-collapsed-seat-card');
+    this.seatRestoreButton.focus({ preventScroll: true });
+    this.updateHintVisibility();
+  }
+
+  expandSeatCard() {
+    const element = this.seatCard.element;
+    const wasCollapsing = element.classList.contains('is-collapsing');
+    if (!this.currentSeat || (!this._seatCardCollapsed && !wasCollapsing)) return;
+
+    this.cancelSeatCardTransition();
+    this._seatCardCollapsing = false;
+    this._seatCardCollapsed = false;
+    this.container.classList.remove('has-collapsed-seat-card');
+    this.seatRestoreButton.classList.remove('is-visible');
+    this.seatRestoreButton.setAttribute('aria-expanded', 'true');
+    this.seatRestoreButton.setAttribute('aria-hidden', 'true');
+    this.seatRestoreButton.tabIndex = -1;
+
+    if (wasCollapsing) {
+      element.classList.remove('is-collapsing');
+      element.style.removeProperty('--seat-collapse-x');
+      element.style.removeProperty('--seat-collapse-y');
+      element.style.removeProperty('--seat-collapse-sx');
+      element.style.removeProperty('--seat-collapse-sy');
+    } else {
+      element.classList.add('is-visible');
+      const cardRect = element.getBoundingClientRect();
+      const buttonRect = this.seatRestoreButton.getBoundingClientRect();
+      element.style.transition = 'none';
+      element.style.transform = 'translate3d(' + (buttonRect.left - cardRect.left) + 'px, ' + (buttonRect.top - cardRect.top) + 'px, 0) scale(' + (buttonRect.width / Math.max(cardRect.width, 1)) + ', ' + (buttonRect.height / Math.max(cardRect.height, 1)) + ')';
+      element.style.opacity = '0';
+      void element.offsetWidth;
+      element.style.removeProperty('transition');
+      element.style.removeProperty('transform');
+      element.style.removeProperty('opacity');
+    }
+    element.setAttribute('aria-hidden', 'false');
+    const closeButton = element.querySelector('.seat-card__close');
+    if (closeButton) closeButton.focus({ preventScroll: true });
+    this.updateHintVisibility();
+  }
+
+  cancelSeatCardTransition() {
+    if (this._seatCardTransitionTimer !== null) {
+      clearTimeout(this._seatCardTransitionTimer);
+      this._seatCardTransitionTimer = null;
+    }
+    if (this._seatCardTransitionHandler) {
+      this.seatCard.element.removeEventListener('transitionend', this._seatCardTransitionHandler);
+      this._seatCardTransitionHandler = null;
+    }
+  }
+
+  setHint(text) {
+    this.hintText = String(text || '');
+    const isCompactScreen = window.matchMedia
+      ? window.matchMedia('(max-width: 768px), (pointer: coarse)').matches
+      : window.innerWidth <= 768;
+    let displayText = this.hintText;
+    if (isCompactScreen) {
+      displayText = displayText
+        .replace('Drag to look around the field. Press Esc to return.', 'Swipe to look around the ice.')
+        .replace('Press Esc to return.', '')
+        .trim();
+    }
+    this.viewHint.textContent = displayText;
+    this.updateHintVisibility();
+  }
+
+  updateHintVisibility() {
+    if (!this.viewHint) return;
+    const cardExpanded = this.seatCard.element.classList.contains('is-visible') && !this._seatCardCollapsed && !this._seatCardCollapsing;
+    this.viewHint.hidden = !this.hintText || cardExpanded;
+    this.viewHint.setAttribute('aria-hidden', this.viewHint.hidden ? 'true' : 'false');
+    this.container.classList.toggle('has-collapsed-seat-card', this._seatCardCollapsed);
   }
 
   renderPhotoSection(info) {
@@ -522,10 +685,13 @@ export class BookingUI {
   }
 
   destroy() {
+    this.cancelSeatCardTransition();
     if (this.noticeTimer !== null) clearTimeout(this.noticeTimer);
+    this.container.classList.remove('has-collapsed-seat-card');
     this.root.remove();
     this.toast.remove();
     this.sectionTooltip.remove();
+    this.viewHint.remove();
     this.aboutDialog.element.remove();
   }
 }

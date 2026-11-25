@@ -42,6 +42,12 @@ canvas { display: block; }
 }
 
 #toolbar .brand span { color: #4da3ff; }
+#toolbar .brand { display: flex; align-items: baseline; gap: 5px; }
+#toolbar .brand .brand__platform { color: #ffffff; font-weight: 800; }
+#toolbar .brand .brand__separator,
+#toolbar .brand .brand__location { color: var(--jets-silver); }
+#toolbar .brand .brand__venue { color: var(--jets-aviator-blue); font-weight: 650; }
+#toolbar .brand .brand__location::before { content: ","; margin-right: 4px; }
 
 #toolbar button {
   background: rgba(255,255,255,0.07);
@@ -184,6 +190,7 @@ canvas { display: block; }
   font-size: 12px;
 }
 .about-dialog__footnote { margin-top: 12px; color: #8493a3 !important; font-size: 11px !important; }
+.about-dialog__copyright { margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(142,144,144,0.28); color: #c5d0dc; font-size: 12px; font-weight: 650; }
 .about-dialog :focus-visible { outline: 2px solid #8fc4ef; outline-offset: 3px; }
 
 /* Right-hand column. It ignores the pointer itself so clicks between the
@@ -1366,4 +1373,342 @@ html, body, #app { background: var(--jets-polar-night); }
   #toolbar .brand { font-size: 12px; }
   #toolbar button { min-height: 32px; }
   #toolbar .scene-mode-select { min-height: 30px; }
+}
+
+/* Immersive, touch-first arena viewer. Keep the 3D bowl visible between a
+   compact control rail and the seat-selection sheet. */
+@media (max-width: 768px) {
+  #toolbar {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-areas:
+      "brand brand flags about"
+      "views views views views"
+      "style style quality notice";
+    align-items: center;
+    max-height: 34dvh;
+    overflow: visible;
+    gap: 6px;
+    padding: max(7px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) 8px max(8px, env(safe-area-inset-left));
+    background: linear-gradient(180deg, rgba(4, 20, 41, 0.98), rgba(4, 30, 66, 0.9) 76%, rgba(4, 30, 66, 0.7));
+    border-bottom: 1px solid rgba(142, 144, 144, 0.46);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.3);
+    -webkit-backdrop-filter: blur(12px) saturate(125%);
+    backdrop-filter: blur(12px) saturate(125%);
+  }
+
+  #toolbar .brand {
+    grid-area: brand;
+    min-width: 0;
+    font-size: 12px;
+    letter-spacing: 0.02em;
+  }
+
+  #toolbar .brand::after {
+    content: none;
+  }
+
+  #toolbar .brand { min-width: 0; gap: 3px; overflow: hidden; font-size: 11px; }
+  #toolbar .brand .brand__separator { display: none; }
+  #toolbar .brand .brand__venue { font-size: 10px; }
+  #toolbar .brand .brand__venue { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  #toolbar .brand .brand__location { display: none; }
+
+  #toolbar .toolbar-left-tools {
+    grid-area: views;
+    min-width: 0;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    gap: 6px;
+    padding: 1px 0 3px;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+  }
+
+  #toolbar .toolbar-left-tools::-webkit-scrollbar { display: none; }
+
+  #toolbar .toolbar-right-tools { display: contents; }
+  #toolbar .toolbar-billboards { grid-area: flags; }
+  #toolbar .toolbar-about { grid-area: about; }
+  #toolbar .scene-style-control { grid-area: style; }
+  #toolbar .scene-quality-control { grid-area: quality; }
+  #toolbar .device-tier-note { grid-area: notice; }
+
+  #toolbar button {
+    min-width: 0;
+    min-height: 36px;
+    padding: 6px 7px;
+    border-color: rgba(142, 144, 144, 0.46);
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 650;
+  }
+
+  #toolbar .toolbar-left-tools button {
+    flex: 0 0 auto;
+    min-height: 34px;
+    padding: 6px 12px;
+    border-radius: 999px;
+  }
+
+  #toolbar .toolbar-left-tools button.active {
+    border-color: rgba(255, 255, 255, 0.72);
+    background: linear-gradient(135deg, #075ba8, #041e42 82%);
+    box-shadow: inset 0 -2px 0 var(--jets-red), 0 3px 12px rgba(0, 76, 151, 0.3);
+  }
+
+  #toolbar .scene-mode-control {
+    display: flex;
+    min-width: 0;
+    min-height: 36px;
+    justify-content: space-between;
+    gap: 4px;
+    overflow: hidden;
+    padding: 3px 5px;
+    border: 1px solid rgba(142, 144, 144, 0.46);
+    border-radius: 10px;
+    background: rgba(3, 14, 29, 0.72);
+    font-size: 0;
+  }
+
+  #toolbar .scene-mode-control::before {
+    flex: 0 0 auto;
+    align-self: center;
+    color: #aebdce;
+    font-size: 7px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+  }
+
+  #toolbar .scene-style-control::before { content: "STYLE"; }
+  #toolbar .scene-quality-control::before { content: "LEVEL"; }
+
+  #toolbar .scene-mode-select {
+    width: 100%;
+    min-width: 0;
+    min-height: 28px;
+    padding: 4px 3px;
+    appearance: auto;
+    border-color: rgba(142, 144, 144, 0.46);
+    border-radius: 6px;
+    font-size: 9px;
+  }
+
+  #toolbar .device-tier-note {
+    min-width: 0;
+    min-height: 32px;
+    padding: 3px 4px;
+    border: 1px solid rgba(142, 144, 144, 0.3);
+    border-radius: 8px;
+    background: rgba(3, 14, 29, 0.55);
+    font-size: 8px;
+  }
+
+  #toolbar .device-tier-note[hidden] { display: none !important; }
+
+  .booking-root {
+    right: auto;
+    bottom: max(9px, env(safe-area-inset-bottom));
+    left: 50%;
+    width: min(460px, calc(100vw - 16px - env(safe-area-inset-left) - env(safe-area-inset-right)));
+    max-height: 48dvh;
+    transform: translateX(-50%);
+    gap: 7px;
+  }
+
+  .section-card,
+  .seat-card {
+    max-height: min(46dvh, 390px);
+    padding: 15px 16px max(15px, env(safe-area-inset-bottom));
+    border: 1px solid rgba(142, 144, 144, 0.55);
+    border-top: 2px solid var(--jets-aviator-blue);
+    border-left-width: 1px;
+    border-radius: 18px;
+    background: linear-gradient(150deg, rgba(7, 23, 44, 0.97), rgba(3, 11, 23, 0.98));
+    box-shadow: 0 20px 52px rgba(0, 0, 0, 0.58), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    -webkit-backdrop-filter: blur(14px) saturate(120%);
+    backdrop-filter: blur(14px) saturate(120%);
+  }
+
+  .section-card__eyebrow { font-size: 9px; letter-spacing: 0.14em; }
+  .section-card__title { margin-top: 5px; font-size: 23px; line-height: 1.1; }
+  .section-card__tier { font-size: 12px; }
+  .section-card__summary { margin-top: 9px; font-size: 12px; }
+  .section-card__hint { margin: 9px 0; }
+
+  .section-card__premium {
+    margin-top: 9px;
+    padding: 10px;
+    border-radius: 12px;
+  }
+
+  .section-card [data-field="tickets"],
+  .seat-card [data-field="tickets"] {
+    min-height: 44px;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 11px;
+    background: linear-gradient(135deg, var(--jets-aviator-blue), #073366);
+    color: #fff;
+    text-decoration: none;
+  }
+
+  .seat-card { border-top-color: var(--jets-red); }
+  .seat-card__title { margin-bottom: 9px; font-size: 11px; }
+  .seat-card__details { font-size: 12px; }
+
+  :root[data-arena-style="cyber"] #toolbar {
+    background: linear-gradient(180deg, rgba(4, 12, 29, 0.98), rgba(8, 20, 40, 0.91) 76%, rgba(8, 20, 40, 0.72));
+    border-bottom-color: rgba(0, 217, 255, 0.48);
+    box-shadow: 0 10px 28px rgba(0, 191, 232, 0.16);
+  }
+
+  :root[data-arena-style="cyber"] #toolbar .brand::after {
+    border-color: rgba(0, 217, 255, 0.52);
+    color: #9af3ff;
+  }
+
+  :root[data-arena-style="cyber"] #toolbar .toolbar-left-tools button.active {
+    border-color: rgba(184, 247, 255, 0.85);
+    background: linear-gradient(135deg, #006b91, #091529 82%);
+    box-shadow: inset 0 -2px 0 var(--jets-red), 0 0 16px rgba(0, 217, 255, 0.22);
+  }
+
+  :root[data-arena-style="cyber"] #toolbar .scene-mode-control {
+    border-color: rgba(0, 217, 255, 0.42);
+    background: rgba(5, 15, 32, 0.8);
+  }
+
+  :root[data-arena-style="cyber"] .section-card,
+  :root[data-arena-style="cyber"] .seat-card {
+    border-color: rgba(0, 217, 255, 0.48);
+    border-top-color: #00d9ff;
+    background: linear-gradient(150deg, rgba(8, 21, 42, 0.97), rgba(4, 10, 25, 0.98));
+    box-shadow: 0 20px 52px rgba(0, 0, 0, 0.58), 0 0 22px rgba(0, 217, 255, 0.12);
+  }
+
+  :root[data-arena-style="cyber"] .seat-card { border-top-color: var(--jets-red); }
+}
+
+@media (max-width: 370px) {
+  #toolbar { gap: 4px; }
+  #toolbar .brand { font-size: 11px; }
+  #toolbar .brand .brand__venue { font-size: 9px; }
+  #toolbar .brand::after { margin-left: 4px; padding: 2px 3px; font-size: 7px; }
+  #toolbar .toolbar-left-tools { gap: 4px; }
+  #toolbar .toolbar-left-tools button { padding-right: 9px; padding-left: 9px; font-size: 9px; }
+  #toolbar .scene-mode-control { padding: 2px 3px; }
+  #toolbar .scene-mode-control::before { font-size: 6px; }
+  #toolbar .scene-mode-select { font-size: 8px; }
+  #toolbar .scene-quality-control::before { content: "TIER"; }
+}
+
+@media (max-width: 900px) and (max-height: 480px) and (pointer: coarse) {
+  #toolbar { max-height: 34dvh; gap: 4px; padding-bottom: 5px; }
+  #toolbar button { min-height: 31px; }
+  #toolbar .toolbar-left-tools button { min-height: 30px; }
+  #toolbar .scene-mode-control { min-height: 31px; }
+  #toolbar .scene-mode-select { min-height: 25px; }
+  .booking-root { max-height: 52dvh; }
+  .section-card,
+  .seat-card { max-height: 50dvh; padding-top: 10px; padding-bottom: 10px; }
+}
+
+/* Selected-seat card collapse/restore and non-overlapping camera hint. */
+.seat-card {
+  transform-origin: top left;
+  transition: transform 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-radius 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform, opacity;
+}
+
+.seat-card.is-visible { animation: none; opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+
+.seat-card.is-collapsing {
+  z-index: 20;
+  overflow: hidden;
+  border-radius: 999px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(var(--seat-collapse-x, 0), var(--seat-collapse-y, 0), 0)
+    scale(var(--seat-collapse-sx, 0.2), var(--seat-collapse-sy, 0.2));
+}
+
+.seat-card-restore {
+  position: fixed;
+  z-index: 25;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  display: grid;
+  width: 56px;
+  height: 56px;
+  place-items: center;
+  padding: 0 0 5px;
+  border: 1px solid rgba(181, 199, 218, 0.75);
+  border-top: 2px solid var(--jets-red);
+  border-radius: 50%;
+  color: #fff;
+  background: linear-gradient(145deg, #0b315d, #041326 82%);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  font: 800 18px/1 system-ui, sans-serif;
+  letter-spacing: 2px;
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 220ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.seat-card-restore.is-visible {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.seat-card-restore:hover { border-color: #fff; box-shadow: 0 10px 28px rgba(0, 0, 0, 0.58), 0 0 18px rgba(0, 76, 151, 0.36); }
+.seat-card-restore:focus-visible { outline: 2px solid #8cc4ff; outline-offset: 3px; }
+
+.view-hint {
+  position: fixed;
+  z-index: 19;
+  bottom: max(20px, env(safe-area-inset-bottom));
+  left: 50%;
+  max-width: calc(100vw - 32px);
+  padding: 8px 14px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(142, 144, 144, 0.38);
+  border-radius: 9px;
+  color: #fff;
+  background: rgba(4, 12, 24, 0.78);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
+  font: 12px/1.35 system-ui, sans-serif;
+  text-align: center;
+  white-space: normal;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 180ms ease, bottom 180ms ease;
+}
+
+.view-hint[hidden] { display: none !important; }
+#app.has-collapsed-seat-card .view-hint { bottom: calc(max(16px, env(safe-area-inset-bottom)) + 64px); }
+
+@media (max-width: 768px), (pointer: coarse) {
+  .view-hint {
+    bottom: max(12px, env(safe-area-inset-bottom));
+    max-width: calc(100vw - 28px);
+    padding: 7px 11px;
+    font-size: 10px;
+  }
+
+  #app.has-collapsed-seat-card .view-hint { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 64px); }
+  .seat-card-restore { right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); width: 52px; height: 52px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seat-card,
+  .seat-card-restore,
+  .view-hint { transition-duration: 1ms !important; }
 }
