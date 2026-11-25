@@ -6,7 +6,8 @@ export function applyRenderQuality(renderer, mode) {
   const quality = getQualityLevel(mode);
   const devicePixelRatio = Number(window.devicePixelRatio) || 1;
   const mobileDisplay = window.matchMedia('(max-width: 768px), (pointer: coarse)').matches;
-  const pixelRatioCap = mobileDisplay && quality.pixelRatio === 1 ? 1.2 : quality.pixelRatio;
+  const mobilePixelRatioCap = quality.pixelRatio >= 2 ? 1.5 : quality.pixelRatio > 1 ? 1.25 : 1.2;
+  const pixelRatioCap = mobileDisplay ? Math.min(quality.pixelRatio, mobilePixelRatioCap) : quality.pixelRatio;
   renderer.setPixelRatio(Math.min(devicePixelRatio, pixelRatioCap));
   renderer.setSize(window.innerWidth, window.innerHeight);
 }

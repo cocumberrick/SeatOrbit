@@ -49,4 +49,32 @@ export function createSeats(bounds, options) {
   return { mesh, data, sectionBounds, outlines, controller, placements };
 }
 
+export async function createSeatsProgressively(bounds, options) {
+  const generated = buildArenaSeatLayout();
+  const placements = options && Array.isArray(options.placements) ? options.placements : generated.placements;
+  const perTier = generated.perTier;
+  options?.onPlacementsReady?.(placements);
+  const controller = createSeatLayoutBuilder(Object.assign({
+    placements,
+    decor: createLegacyDecor(),
+    name: 'Seats',
+    deferInitialBuild: true
+  }, options || {}, { deferInitialBuild: true }));
+
+  options?.onMeshReady?.(controller.mesh);
+  await controller.initializeProgressively(placements, {
+    batchSize: options?.batchSize || 600,
+    onProgress: options?.onProgress
+  });
+
+  const { mesh, data, sectionBounds, outlines } = controller;
+  console.info(
+    `[Seats] ${data.length.toLocaleString()} seats generated in ` +
+    `${Object.keys(sectionBounds).length} sections ` +
+    `(lower ${perTier.lower}, club ${perTier.club}, upper ${perTier.upper}) ` +
+    `capacity ${controller.capacity}`
+  );
+  return { mesh, data, sectionBounds, outlines, controller, placements };
+}
+
 export default createSeats;

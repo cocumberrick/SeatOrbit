@@ -2,14 +2,19 @@
 export const CAMERA_PRESETS = {
   overview: {
     label: 'Arena Overview',
-    position: [88, 142, 96],
-    target: [0, 0, 0]
+    // A wider diagonal gives the bowl room around its outside edge.
+    position: [118, 176, 102],
+    // Portrait framing turns the rink's long axis into screen height, leaving
+    // the narrower end-to-end dimension across the phone screen.
+    mobilePosition: [112, 168, 0],
+    target: [0, 4, 0]
   },
   gameNightOverview: {
     label: 'Game Night Overview',
     // A lower diagonal establishes the lit ice, bowl tiers and center-hung board together.
-    position: [94, 112, 77],
-    target: [0, 1, 0]
+    position: [130, 166, 100],
+    mobilePosition: [126, 174, 0],
+    target: [0, 4, 0]
   },
   fieldLevel: {
     label: 'Ice Level',

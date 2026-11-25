@@ -56,10 +56,10 @@ function createSeatMaterial() {
       float seatColorPeak = max(max(diffuseColor.r, diffuseColor.g), diffuseColor.b);
       float seatAccent = smoothstep(0.24, 0.62, seatColorPeak);
       float seatSoften = uSeatDistanceSoftening * (1.0 - seatAccent);
-      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.18, 0.21, 0.25), seatSoften);`
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.035, 0.065, 0.115), seatSoften);`
     );
   };
-  material.customProgramCacheKey = function () { return 'arena-seat-distance-softening-v1'; };
+  material.customProgramCacheKey = function () { return 'arena-seat-distance-softening-v2'; };
   return material;
 }
 
@@ -306,9 +306,11 @@ export class SeatLayoutBuilder {
     this.mesh.userData.seatLayout = this;
     this.mesh.userData.dispose = () => this.dispose();
 
-    this._appendPlacements(initial, this._decor);
-    this._refreshAggregates(true);
-    this.flush();
+    if (!o.deferInitialBuild) {
+      this._appendPlacements(initial, this._decor);
+      this._refreshAggregates(true);
+      this.flush();
+    }
   }
 
   get size() { return this.highWater; }
@@ -438,8 +440,8 @@ export class SeatLayoutBuilder {
     return seat;
   }
 
-  _appendPlacements(placements, decor) {
-    for (let i = 0; i < placements.length; i++) {
+  _appendPlacements(placements, decor, start = 0, end = placements.length) {
+    for (let i = start; i < end; i++) {
       const p = placements[i];
       if (this.byKey.has(p.key)) continue;
       const id = this._allocateId(p.key);
@@ -448,6 +450,29 @@ export class SeatLayoutBuilder {
       this._writeColor(id);
     }
     this.mesh.count = this.highWater;
+  }
+
+  async initializeProgressively(placements, options) {
+    if (this.highWater > 0 || this.mesh.count > 0) return this;
+    const items = Array.isArray(placements) ? placements : [];
+    const settings = options || {};
+    const batchSize = Math.max(100, Math.floor(settings.batchSize || 600));
+    const yieldFrame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+    this.mesh.frustumCulled = false;
+
+    for (let start = 0; start < items.length; start += batchSize) {
+      const end = Math.min(start + batchSize, items.length);
+      this._appendPlacements(items, this._decor, start, end);
+      this._boundsDirty = true;
+      this.flush({ computeBounds: false });
+      settings.onProgress?.(end, items.length);
+      if (end < items.length) await yieldFrame();
+    }
+
+    this._refreshAggregates(true);
+    this.flush();
+    this.mesh.frustumCulled = true;
+    return this;
   }
 
   applyLayout(placements, opts) {
@@ -877,8 +902,9 @@ export class SeatLayoutBuilder {
     requestAnimationFrame(this._flushScheduled);
   }
 
-  flush() {
+  flush(options) {
     if (this._disposed) return;
+    const computeBounds = !options || options.computeBounds !== false;
     if (this._matrixMax >= this._matrixMin) {
       const start = this._matrixMin;
       const count = this._matrixMax - this._matrixMin + 1;
@@ -891,7 +917,7 @@ export class SeatLayoutBuilder {
       markAttributeUpdate(this.mesh.instanceColor, start * 3, count * 3, this.capacity * 3);
       this._colorMin = Infinity; this._colorMax = -Infinity;
     }
-    if (this._boundsDirty) {
+    if (computeBounds && this._boundsDirty) {
       this.mesh.computeBoundingSphere();
       this._boundsDirty = false;
     }

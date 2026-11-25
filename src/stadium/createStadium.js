@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { ARENA, getFieldBounds } from '../config/stadiumConfig.js';
 import { createPit } from './createPit.js';
 import { createBowl } from './createBowl.js';
-import { createSeats } from './createSeats.js';
+import { createSeatsProgressively } from './createSeats.js';
 import { createConcourse } from './createConcourse.js';
 import { createRoof } from './createRoof.js';
 import { createVideoBoard } from './createVideoBoard.js';
@@ -19,25 +19,42 @@ function freezeStaticTransforms(root) {
   });
 }
 
-export function createStadium(scene, initialMode = QUALITY_MODE.STANDARD, onInvalidate) {
+export async function createStadium(scene, initialMode = QUALITY_MODE.STANDARD, onInvalidate, onBuildProgress) {
   const initialSceneMode = normalizeQualityMode(initialMode);
   const stadium = new THREE.Group();
   stadium.name = 'CanadaLifeCentre';
+  scene.add(stadium);
 
   const bounds = getFieldBounds();
-  const seats = createSeats(bounds);
+  const yieldFrame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+  const updateProgress = async (message) => {
+    onBuildProgress?.(message);
+    await yieldFrame();
+  };
+
+  onBuildProgress?.('Building rink and ice…');
+  stadium.add(createRink());
+  await updateProgress('Building arena bowl…');
+  stadium.add(createPit());
+  let seats;
+  seats = await createSeatsProgressively(bounds, {
+    batchSize: 700,
+    onPlacementsReady: (placements) => stadium.add(createBowl(placements)),
+    onMeshReady: (mesh) => stadium.add(mesh),
+    onProgress: (built, total) => {
+      onBuildProgress?.(`Building seats… ${Math.round((built / total) * 100)}%`);
+    }
+  });
+  await updateProgress('Adding fans and arena services…');
   const fans = createSeatedFans(seats.data, initialSceneMode, onInvalidate);
   const concourse = createConcourse();
   let videoBoard = null;
   let atmosphere = null;
   let powerRing = null;
 
-  stadium.add(createRink());
-  stadium.add(createPit());
-  stadium.add(createBowl(seats.placements));
-  stadium.add(seats.mesh);
   stadium.add(fans);
   stadium.add(concourse);
+  await updateProgress('Finishing arena details…');
   stadium.add(createRoof());
   freezeStaticTransforms(stadium);
 
@@ -218,7 +235,6 @@ export function createStadium(scene, initialMode = QUALITY_MODE.STANDARD, onInva
     return arenaStyle;
   }
 
-  scene.add(stadium);
   stadium.userData.dispose = () => {
     for (const child of stadium.children) child.userData.dispose?.();
     stadium.removeFromParent();

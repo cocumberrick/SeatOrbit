@@ -38,13 +38,14 @@ export function detectDeviceTier(renderer, navigatorLike = globalThis.navigator)
   const softwareGpu = SOFTWARE_RENDERER.test(gpu);
   const reasons = [];
 
-  if (mobile) reasons.push('mobile');
   if (softwareGpu) reasons.push('software-gpu');
   if (cores !== null && cores <= 2) reasons.push('limited-cpu');
   if (memory !== null && memory <= 2) reasons.push('limited-memory');
   if (cores !== null && cores <= 4 && memory !== null && memory <= 4) reasons.push('limited-device');
 
-  const isLiteRecommended = reasons.length > 0;
+  // Standard is the expected baseline on phones; Lite auto-selection is
+  // reserved for constrained desktop/software-rendered environments.
+  const isLiteRecommended = !mobile && reasons.length > 0;
   return {
     mode: isLiteRecommended ? QUALITY_MODE.LITE : QUALITY_MODE.STANDARD,
     autoSelected: isLiteRecommended,

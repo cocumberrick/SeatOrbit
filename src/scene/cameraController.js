@@ -86,8 +86,8 @@ export function clampCameraForMode(camera, controls, mode) {
     clampExteriorCamera(camera);
   } else if (mode === 'overview') {
     const roofClearance = ARENA.roof.elevation + 5;
-    camera.position.y = THREE.MathUtils.clamp(camera.position.y, roofClearance, 240);
-    clampToOval(camera.position, 0, 0, ARENA.roof.halfLength + 55, ARENA.roof.halfWidth + 55);
+    camera.position.y = THREE.MathUtils.clamp(camera.position.y, roofClearance, 600);
+    clampToOval(camera.position, 0, 0, ARENA.roof.halfLength + 200, ARENA.roof.halfWidth + 200);
   } else if (mode === 'section' || mode === 'seat') {
     clampInteriorCamera(camera);
   }
@@ -95,10 +95,10 @@ export function clampCameraForMode(camera, controls, mode) {
 }
 
 function clampTransitCamera(camera) {
-  camera.position.x = THREE.MathUtils.clamp(camera.position.x, -150, 150);
-  camera.position.z = THREE.MathUtils.clamp(camera.position.z, -125, 125);
+  camera.position.x = THREE.MathUtils.clamp(camera.position.x, -500, 500);
+  camera.position.z = THREE.MathUtils.clamp(camera.position.z, -500, 500);
   // Overview and exterior flights may legitimately pass above the roof; the destination is clamped again for its active mode.
-  camera.position.y = THREE.MathUtils.clamp(camera.position.y, BOWL.fieldElevation + 1.35, 240);
+  camera.position.y = THREE.MathUtils.clamp(camera.position.y, BOWL.fieldElevation + 1.35, 600);
 }
 
 export function easeInOutCubic(t) {

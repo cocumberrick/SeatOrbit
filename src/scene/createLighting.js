@@ -76,6 +76,13 @@ export function createLighting(scene, renderer = null) {
   let sceneMode = QUALITY_MODE.STANDARD;
   let arenaStyle = 'jets';
   let floodBase = FLOOD_DUSK;
+  let overviewMode = false;
+
+  function setOverviewMode(enabled) {
+    overviewMode = !!enabled;
+    floodlights.group.visible = !overviewMode;
+    for (const light of floodlights.lights) light.visible = !overviewMode;
+  }
 
   function setSceneMode(mode) {
     sceneMode = normalizeQualityMode(mode);
@@ -146,7 +153,7 @@ export function createLighting(scene, renderer = null) {
   }
 
   function update(timeSeconds) {
-    if (sceneMode !== QUALITY_MODE.ULTRA) return;
+    if (sceneMode !== QUALITY_MODE.ULTRA || overviewMode) return;
     const pulse = 0.94 + 0.06 * Math.sin(timeSeconds * 1.25);
     floodlights.setIntensity(floodBase * pulse);
   }
@@ -158,6 +165,7 @@ export function createLighting(scene, renderer = null) {
     fill,
     floodlights,
     environment,
+    setOverviewMode,
     setSceneMode,
     setArenaStyle,
     update,

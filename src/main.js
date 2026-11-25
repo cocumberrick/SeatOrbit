@@ -64,12 +64,60 @@ function expandOval(oval, distance) {
   };
 }
 
-function init() {
+function fitArenaOverviewPreset(preset, arenaOval, aspect, fov, mobile) {
+  const target = preset.target;
+  const position = mobile && preset.mobilePosition ? preset.mobilePosition : preset.position;
+  const dx = position[0] - target[0];
+  const dy = position[1] - target[1];
+  const dz = position[2] - target[2];
+  const length = Math.max(Math.hypot(dx, dy, dz), 0.001);
+  const dirX = dx / length;
+  const dirY = dy / length;
+  const dirZ = dz / length;
+  const horizontal = Math.max(Math.hypot(dirX, dirZ), 0.001);
+  const rightX = dirZ / horizontal;
+  const rightZ = -dirX / horizontal;
+  const upX = -dirX * dirY / horizontal;
+  const upY = horizontal;
+  const upZ = -dirZ * dirY / horizontal;
+  const tanVertical = Math.tan(THREE.MathUtils.degToRad(fov * 0.5));
+  const tanHorizontal = tanVertical * Math.max(aspect, 0.25);
+  const halfL = arenaOval.halfL + 2;
+  const halfW = arenaOval.halfW + 2;
+  const minY = BOWL.fieldElevation - 1;
+  const maxY = Math.max(ARENA.jumbotron.position.y + ARENA.jumbotron.size.height * 0.5, 17);
+  let distance = 0;
+
+  for (let xSide = -1; xSide <= 1; xSide += 2) {
+    for (let zSide = -1; zSide <= 1; zSide += 2) {
+      for (let ySide = 0; ySide <= 1; ySide++) {
+        const cornerX = xSide * halfL - target[0];
+        const cornerY = (ySide ? maxY : minY) - target[1];
+        const cornerZ = zSide * halfW - target[2];
+        const depth = cornerX * dirX + cornerY * dirY + cornerZ * dirZ;
+        const screenX = cornerX * rightX + cornerZ * rightZ;
+        const screenY = cornerX * upX + cornerY * upY + cornerZ * upZ;
+        distance = Math.max(
+          distance,
+          depth + Math.abs(screenX) / tanHorizontal,
+          depth + Math.abs(screenY) / tanVertical
+        );
+      }
+    }
+  }
+  distance = Math.max(distance * 1.12, 150);
+  return {
+    position: [target[0] + dirX * distance, target[1] + dirY * distance, target[2] + dirZ * distance],
+    target
+  };
+}
+
+async function init() {
   const container = document.getElementById('app');
 
   const loading = document.createElement('div');
   loading.id = 'loading';
-  loading.innerHTML = '<div class="spinner"></div><p>Building stadium geometry\u2026</p>';
+  loading.innerHTML = '<div class="spinner"></div><p>Preparing arena…</p>';
   container.appendChild(loading);
 
   try {
@@ -81,7 +129,9 @@ function init() {
     const mobileMediaQuery = window.matchMedia('(max-width: 768px), (pointer: coarse)');
     let mobileControls = mobileMediaQuery.matches || window.innerWidth <= 768;
     let renderFrame = 0;
+    let appReady = false;
     function requestRender() {
+      if (!appReady) return;
       if (renderFrame) return;
       renderFrame = requestAnimationFrame(animate);
     }
@@ -89,26 +139,41 @@ function init() {
     const DEFAULT_SCENE_MODE = deviceTier.mode;
     applyRenderQuality(renderer, DEFAULT_SCENE_MODE);
     const defaultCameraFov = camera.fov;
-    const initialPreset = CAMERA_PRESETS.overview;
-    camera.position.fromArray(initialPreset.position);
+    const walkLayouts = getTierLayouts();
+    const walkArenaOval = expandOval(
+      getTierBackOval(walkLayouts[2]),
+      ARENA.concourse2.width - 0.65
+    );
+    const initialPreset = DEFAULT_SCENE_MODE === QUALITY_MODE.ULTRA
+      ? CAMERA_PRESETS.gameNightOverview
+      : CAMERA_PRESETS.overview;
+    camera.fov = mobileControls ? 58 : defaultCameraFov;
+    const fittedStartupPreset = fitArenaOverviewPreset(
+      initialPreset, walkArenaOval, camera.aspect, camera.fov, mobileControls
+    );
+    camera.position.fromArray(fittedStartupPreset.position);
     controls.target.fromArray(initialPreset.target);
+    camera.updateProjectionMatrix();
     controls.update();
 
     const arenaEnvironment = createEnvironment(scene);
     
     // Ð˜Ð¡ÐŸÐ ÐÐ’Ð›Ð•ÐÐž: ÐŸÐµÑ€ÐµÐ´Ð°ÐµÐ¼ renderer Ð´Ð»Ñ ÑÐ¾Ð·Ð´Ð°Ð½Ð¸Ñ PMREM Ð¾ÐºÑ€ÑƒÐ¶ÐµÐ½Ð¸Ñ (Ð¾Ñ‚Ñ€Ð°Ð¶ÐµÐ½Ð¸Ð¹)
     const lights = createLighting(scene, renderer);
+    lights.setOverviewMode(true);
 
-    const stadium = createStadium(scene, DEFAULT_SCENE_MODE, requestRender);
-    const walkLayouts = getTierLayouts();
+    const stadium = await createStadium(scene, DEFAULT_SCENE_MODE, requestRender, (message) => {
+      const status = loading.querySelector('p');
+      if (status) status.textContent = message;
+      renderer.render(scene, camera);
+    });
     const rinkOval = {
       halfL: RINK.LENGTH / 2,
       halfW: RINK.WIDTH / 2,
       radius: RINK.CORNER_RADIUS
     };
-    const walkArenaOval = expandOval(
-      getTierBackOval(walkLayouts[2]),
-      ARENA.concourse2.width - 0.65
+    const getFittedOverviewPreset = (preset) => fitArenaOverviewPreset(
+      preset, walkArenaOval, camera.aspect, camera.fov, mobileControls
     );
     const tierBackDistances = walkLayouts.map((layout) => layout.backOffset);
     const tierFrontDistances = walkLayouts.map((layout) => layout.frontOffset - layout.cfg.rowDepth / 2);
@@ -265,7 +330,8 @@ function init() {
       if (modeChanged && viewMode === VIEW.OVERVIEW && activePreset === 'overview') {
         const preset = sceneMode === QUALITY_MODE.ULTRA ? CAMERA_PRESETS.gameNightOverview : CAMERA_PRESETS.overview;
         configureCameraMode('overview');
-        flyTo(camera, controls, preset.position, preset.target, 850, 'overview');
+        const fittedPreset = getFittedOverviewPreset(preset);
+        flyTo(camera, controls, fittedPreset.position, fittedPreset.target, 850, 'overview');
       }
       requestRender();
     }
@@ -532,15 +598,18 @@ function init() {
     }
 
     function flyToPreset(preset) {
-      const destination = sceneMode === QUALITY_MODE.ULTRA && activePreset === 'overview'
+      const overviewPreset = sceneMode === QUALITY_MODE.ULTRA && activePreset === 'overview'
         ? CAMERA_PRESETS.gameNightOverview
         : preset;
+      const destination = activePreset === 'overview'
+        ? getFittedOverviewPreset(overviewPreset)
+        : overviewPreset;
       flyTo(camera, controls, destination.position, destination.target, 800, activePreset);
     }
 
     function configureCameraMode(key) {
       const settings = {
-        overview: { min: 78, max: 220, pan: false, polar: 0.95 },
+        overview: { min: 78, max: 620, pan: false, polar: 0.95 },
         fieldLevel: { min: 12, max: 22, pan: false, polar: 1.42 },
         exterior: { min: 78, max: 230, pan: false, polar: 1.48 },
         section: { min: 18, max: 105, pan: false, polar: 1.48 }
@@ -553,11 +622,21 @@ function init() {
       controls.enableRotate = !(mobileControls && key === 'overview');
       controls.minPolarAngle = key === 'overview' ? 0.18 : key === 'fieldLevel' ? 1.25 : 0.08;
       controls.maxPolarAngle = settings.polar;
-      camera.fov = key === 'fieldLevel' ? 82 : defaultCameraFov;
+      camera.fov = key === 'fieldLevel' ? 82 : key === 'overview' && mobileControls ? 58 : defaultCameraFov;
       camera.updateProjectionMatrix();
+      controls.enableZoom = !(mobileControls && key === 'overview');
+      lights.setOverviewMode(key === 'overview');
     }
 
     configureCameraMode('overview');
+    const firstOverviewPreset = DEFAULT_SCENE_MODE === QUALITY_MODE.ULTRA
+      ? CAMERA_PRESETS.gameNightOverview
+      : CAMERA_PRESETS.overview;
+    const fittedInitialOverview = getFittedOverviewPreset(firstOverviewPreset);
+    camera.position.fromArray(fittedInitialOverview.position);
+    controls.target.fromArray(fittedInitialOverview.target);
+    clampCameraForMode(camera, controls, 'overview');
+    controls.update();
 
     function stopWalk(animateToOverview = true) {
       if (viewMode !== VIEW.WALK) return;
@@ -595,6 +674,7 @@ function init() {
       currentSection = null;
       viewMode = VIEW.WALK;
       activePreset = 'walk';
+      lights.setOverviewMode(false);
       camera.fov = defaultCameraFov;
       camera.updateProjectionMatrix();
       walkKeys.clear();
@@ -1201,23 +1281,26 @@ function init() {
 
     window.addEventListener('resize', function () {
       camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
       applyRenderQuality(renderer, sceneMode);
       updateCanvasRect();
       const nextMobileControls = mobileMediaQuery.matches || window.innerWidth <= 768;
       if (nextMobileControls !== mobileControls) {
         mobileControls = nextMobileControls;
         if (toolbar) toolbar.setWalkAvailable(!mobileControls);
-        if (mobileControls && viewMode === VIEW.WALK) stopWalk(true);
-        else if (viewMode === VIEW.OVERVIEW && activePreset === 'overview') {
-          configureCameraMode('overview');
-          const preset = sceneMode === QUALITY_MODE.ULTRA
-            ? CAMERA_PRESETS.gameNightOverview
-            : CAMERA_PRESETS.overview;
-          flyTo(camera, controls, preset.position, preset.target, 650, 'overview');
-        } else {
+        if (mobileControls && viewMode === VIEW.WALK) stopWalk(false);
+        else if (!(viewMode === VIEW.OVERVIEW && activePreset === 'overview')) {
           configureCameraMode(activePreset);
         }
+      }
+      if (viewMode === VIEW.OVERVIEW && activePreset === 'overview') {
+        configureCameraMode('overview');
+        const preset = sceneMode === QUALITY_MODE.ULTRA
+          ? CAMERA_PRESETS.gameNightOverview
+          : CAMERA_PRESETS.overview;
+        const fittedPreset = getFittedOverviewPreset(preset);
+        flyTo(camera, controls, fittedPreset.position, fittedPreset.target, 650, 'overview');
+      } else {
+        camera.updateProjectionMatrix();
       }
       requestRender();
     });
@@ -1335,9 +1418,9 @@ function init() {
           const dy = camera.position.y - controls.target.y;
           const dz = camera.position.z - controls.target.z;
           const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-          const fadeT = Math.max(0, Math.min(1, (distance - 120) / 150));
+          const fadeT = Math.max(0, Math.min(1, (distance - 85) / 150));
           const easedFade = fadeT * fadeT * (3 - 2 * fadeT);
-          const qualityFade = sceneMode === QUALITY_MODE.LITE ? 0.58 : 0.46;
+          const qualityFade = sceneMode === QUALITY_MODE.LITE ? 0.9 : 0.84;
           seatDistanceSoftening.value = easedFade * qualityFade;
         } else {
           seatDistanceSoftening.value = 0;
@@ -1368,6 +1451,7 @@ function init() {
         requestRender();
       }
     }
+    appReady = true;
     requestRender();
   } catch (error) {
     console.error('Failed to initialise stadium:', error);
