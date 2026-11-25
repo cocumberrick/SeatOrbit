@@ -221,6 +221,7 @@ function init() {
     const seatCameraTarget = new THREE.Vector3();
     const pickTargets = [seatMesh, bowl].filter(Boolean);
     const raycaster = new THREE.Raycaster();
+    const seatHits = [];
     const pointer = new THREE.Vector2();
 
     let viewMode = VIEW.OVERVIEW;
@@ -283,6 +284,7 @@ function init() {
     if (outlineGroup && !outlineGroup.parent) scene.add(outlineGroup);
     const outlineRaycaster = new THREE.Raycaster();
     outlineRaycaster.params.Line.threshold = 0.5;
+    const outlineHits = [];
     let hoveredOutline = null;
     let hoveredSectionLabel = null;
     const outlinePickTargets = [];
@@ -294,7 +296,7 @@ function init() {
 
     let hoveredSeatId = null;
     let seatHoverCursorSet = false;
-    let pendingPointer = null;
+    const pendingPointer = { x: 0, y: 0, active: false };
     let hoverFrame = 0;
     let lastHoverTime = 0;
     const lastHover = { x: NaN, y: NaN, mode: null };
@@ -546,6 +548,9 @@ function init() {
       controls.minDistance = settings.min;
       controls.maxDistance = settings.max;
       controls.enablePan = settings.pan;
+      // On phones the overview remains a stable arena map; touch gestures are
+      // reserved for section picking instead of rotating the camera.
+      controls.enableRotate = !(mobileControls && key === 'overview');
       controls.minPolarAngle = key === 'overview' ? 0.18 : key === 'fieldLevel' ? 1.25 : 0.08;
       controls.maxPolarAngle = settings.polar;
       camera.fov = key === 'fieldLevel' ? 82 : defaultCameraFov;
@@ -782,6 +787,14 @@ function init() {
     const dom = renderer.domElement;
     let downAt = null;
     const activeTouchPointers = new Set();
+    const mobileOverviewPress = {
+      pointerId: null,
+      active: false,
+      x: 0,
+      y: 0,
+      lastX: 0,
+      lastY: 0
+    };
     const debugOverlay = document.createElement('pre');
     debugOverlay.setAttribute('aria-live', 'polite');
     debugOverlay.style.cssText = 'position:fixed;top:112px;left:12px;z-index:10000;margin:0;padding:10px 12px;border:1px solid #52657c;border-radius:8px;background:rgba(5,12,22,.88);color:#d7e7f7;font:12px/1.55 ui-monospace,monospace;white-space:pre;pointer-events:none;display:none;';
@@ -807,14 +820,30 @@ function init() {
     }
 
     dom.addEventListener('pointerdown', function (e) {
-      pendingPointer = null;
+      pendingPointer.active = false;
       if (viewMode === VIEW.WALK) return;
       if (e.pointerType === 'touch') {
         activeTouchPointers.add(e.pointerId);
-        if (activeTouchPointers.size > 1) { downAt = null; return; }
+        if (activeTouchPointers.size > 1) {
+          downAt = null;
+          mobileOverviewPress.pointerId = null;
+          mobileOverviewPress.active = false;
+          pendingPointer.active = false;
+          clearHover();
+          return;
+        }
       }
       if (e.button !== 0 || !e.isPrimary) return;
       downAt = { x: e.clientX, y: e.clientY, pointerId: e.pointerId, pointerType: e.pointerType };
+      if (mobileControls && viewMode === VIEW.OVERVIEW && activePreset === 'overview' && outlinesActive()) {
+        mobileOverviewPress.pointerId = e.pointerId;
+        mobileOverviewPress.active = true;
+        mobileOverviewPress.x = mobileOverviewPress.lastX = e.clientX;
+        mobileOverviewPress.y = mobileOverviewPress.lastY = e.clientY;
+        lastHover.x = lastHover.y = NaN;
+        try { dom.setPointerCapture(e.pointerId); } catch (err) { /* Pointer capture is optional. */ }
+        queueHover(e.clientX, e.clientY);
+      }
     });
 
     window.addEventListener('pointermove', function (event) {
@@ -858,6 +887,12 @@ function init() {
     dom.addEventListener('pointercancel', function (event) {
       downAt = null;
       if (event.pointerType === 'touch') activeTouchPointers.delete(event.pointerId);
+      if (mobileOverviewPress.pointerId === event.pointerId) {
+        mobileOverviewPress.pointerId = null;
+        mobileOverviewPress.active = false;
+        pendingPointer.active = false;
+        clearHover();
+      }
     });
 
     document.addEventListener('pointerlockchange', function () {
@@ -877,7 +912,8 @@ function init() {
     function pickOutlineAt(x, y) {
       setPointerNdc(x, y);
       outlineRaycaster.setFromCamera(pointer, camera);
-      const hits = outlineRaycaster.intersectObjects(outlinePickTargets, false);
+      outlineHits.length = 0;
+      const hits = outlineRaycaster.intersectObjects(outlinePickTargets, false, outlineHits);
       for (const hit of hits) {
         const outline = hit.object.isMesh ? hit.object.parent : hit.object;
         if (outline && outline.userData && outline.userData.sectionLabel) return outline;
@@ -939,7 +975,8 @@ function init() {
     function runSeatHover(at) {
       setPointerNdc(at.x, at.y);
       raycaster.setFromCamera(pointer, camera);
-      const hits = raycaster.intersectObjects(pickTargets, true);
+      seatHits.length = 0;
+      const hits = raycaster.intersectObjects(pickTargets, true, seatHits);
       const first = hits[0];
       const id = first && first.object === seatMesh && first.instanceId !== undefined
         ? first.instanceId
@@ -970,20 +1007,22 @@ function init() {
     }
 
     function queueHover(x, y) {
-      pendingPointer = { x, y };
+      pendingPointer.x = x;
+      pendingPointer.y = y;
+      pendingPointer.active = true;
       if (!hoverFrame) hoverFrame = requestAnimationFrame(runHover);
     }
 
     function runHover() {
       hoverFrame = 0;
       const at = pendingPointer;
-      if (!at) return;
+      if (!at.active) return;
       const now = performance.now();
       if (now - lastHoverTime < HOVER_MIN_INTERVAL_MS) {
         hoverFrame = requestAnimationFrame(runHover);
         return;
       }
-      pendingPointer = null;
+      at.active = false;
       lastHoverTime = now;
       if (at.x === lastHover.x && at.y === lastHover.y && viewMode === lastHover.mode) return;
       lastHover.x = at.x; lastHover.y = at.y; lastHover.mode = viewMode;
@@ -992,6 +1031,19 @@ function init() {
     }
 
     dom.addEventListener('pointermove', function (e) {
+      if (mobileOverviewPress.active && mobileOverviewPress.pointerId === e.pointerId &&
+          viewMode === VIEW.OVERVIEW && activePreset === 'overview') {
+        const dx = e.clientX - mobileOverviewPress.lastX;
+        const dy = e.clientY - mobileOverviewPress.lastY;
+        if ((dx * dx) + (dy * dy) >= 6.25) {
+          mobileOverviewPress.lastX = e.clientX;
+          mobileOverviewPress.lastY = e.clientY;
+          mobileOverviewPress.x = e.clientX;
+          mobileOverviewPress.y = e.clientY;
+          queueHover(e.clientX, e.clientY);
+        }
+        return;
+      }
       if (viewMode === VIEW.SEAT) {
         if (hoveredOutline) clearHover();
         return;
@@ -1012,8 +1064,9 @@ function init() {
       queueHover(e.clientX, e.clientY);
     });
     dom.addEventListener('pointerleave', function () {
+      if (mobileOverviewPress.active) return;
       downAt = null;
-      pendingPointer = null;
+      pendingPointer.active = false;
       lastHover.x = lastHover.y = NaN;
       if (hoveredOutline) clearHover();
       clearSeatHover();
@@ -1021,12 +1074,25 @@ function init() {
 
     dom.addEventListener('pointerup', function (e) {
       if (e.pointerType === 'touch') activeTouchPointers.delete(e.pointerId);
+      const wasMobileOverviewPress = mobileOverviewPress.pointerId === e.pointerId;
+      if (wasMobileOverviewPress) {
+        mobileOverviewPress.pointerId = null;
+        mobileOverviewPress.active = false;
+        pendingPointer.active = false;
+        if (hoverFrame) {
+          cancelAnimationFrame(hoverFrame);
+          hoverFrame = 0;
+        }
+      }
       if (viewMode === VIEW.WALK) { downAt = null; return; }
       if (!downAt || !e.isPrimary || e.pointerId !== downAt.pointerId) return;
       const moved = Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y);
       const tapThreshold = downAt.pointerType === 'touch' ? 14 : 6;
       downAt = null;
-      if (moved > tapThreshold) return;
+      if (moved > tapThreshold) {
+        if (wasMobileOverviewPress) clearHover();
+        return;
+      }
 
       if (outlinesActive()) {
         const outline = pickOutlineAt(e.clientX, e.clientY);
@@ -1041,7 +1107,8 @@ function init() {
       setPointerNdc(e.clientX, e.clientY);
       raycaster.setFromCamera(pointer, camera);
 
-      const hits = raycaster.intersectObjects(pickTargets, true);
+      seatHits.length = 0;
+      const hits = raycaster.intersectObjects(pickTargets, true, seatHits);
       const first = hits[0];
       if (first && first.object === seatMesh && first.instanceId !== undefined) {
         handleSeatClick(first.instanceId);
@@ -1142,6 +1209,15 @@ function init() {
         mobileControls = nextMobileControls;
         if (toolbar) toolbar.setWalkAvailable(!mobileControls);
         if (mobileControls && viewMode === VIEW.WALK) stopWalk(true);
+        else if (viewMode === VIEW.OVERVIEW && activePreset === 'overview') {
+          configureCameraMode('overview');
+          const preset = sceneMode === QUALITY_MODE.ULTRA
+            ? CAMERA_PRESETS.gameNightOverview
+            : CAMERA_PRESETS.overview;
+          flyTo(camera, controls, preset.position, preset.target, 650, 'overview');
+        } else {
+          configureCameraMode(activePreset);
+        }
       }
       requestRender();
     });

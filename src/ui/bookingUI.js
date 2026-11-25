@@ -108,7 +108,8 @@ export class BookingUI {
     element.setAttribute('role', 'tooltip');
     element.style.cssText = [
       'position:fixed', 'left:0', 'top:0', 'display:none', 'z-index:30',
-      'padding:6px 12px', 'border-radius:6px', 'white-space:nowrap',
+      'padding:6px 12px', 'border-radius:6px', 'white-space:normal', 'text-align:center',
+      'max-width:calc(100vw - 16px)', 'transform:translateX(-50%)',
       'background:rgba(4,30,66,0.96)', 'color:#ffffff',
       'border:1px solid rgba(142,144,144,0.72)',
       'font:600 13px/1.3 system-ui,sans-serif', 'pointer-events:none',
@@ -122,16 +123,12 @@ export class BookingUI {
     const text = 'Section ' + label + ' - From ' + formatCad(minPrice);
     if (tip.textContent !== text) tip.textContent = text;
     tip.style.display = 'block';
-
-    const gap = 16;
-    const width = tip.offsetWidth;
-    const height = tip.offsetHeight;
-    let left = clientX + gap;
-    let top = clientY + gap;
-    if (left + width > window.innerWidth - 8) left = clientX - gap - width;
-    if (top + height > window.innerHeight - 8) top = clientY - gap - height;
-    tip.style.left = Math.max(8, left) + 'px';
-    tip.style.top = Math.max(8, top) + 'px';
+    const maxWidth = Math.max(1, Math.min(320, window.innerWidth - 16));
+    const halfWidth = maxWidth / 2;
+    const centerX = Math.max(halfWidth + 8, Math.min(window.innerWidth - halfWidth - 8, clientX));
+    const top = Math.max(8, Math.min(window.innerHeight - 56, clientY + 18));
+    tip.style.left = centerX + 'px';
+    tip.style.top = top + 'px';
   }
 
   hideSectionTooltip() {
