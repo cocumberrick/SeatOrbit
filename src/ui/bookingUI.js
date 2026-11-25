@@ -7,6 +7,7 @@
  */
 
 import { processPhoto } from './photoUpload.js';
+import { STRIPE_FAN_FLAG_PAYMENT_CONFIGURED } from '../config/fanFlagPaymentConfig.js';
 
 const NOTICE_DURATION_MS = 3200;
 
@@ -20,6 +21,7 @@ export class BookingUI {
     this.handlers = Object.assign({
       onCloseSeatCard: function () {},
       onSavePhoto: function () { return { ok: true }; },
+      onCheckoutPhoto: function () { return { configured: false }; },
       onRemovePhoto: function () { return { ok: true }; },
       onViewIn3D: function () {},
       onTicketsClick: function () {},
@@ -60,6 +62,9 @@ export class BookingUI {
   }
 
   buildAboutDialog() {
+    const paymentDescription = STRIPE_FAN_FLAG_PAYMENT_CONFIGURED
+      ? 'A configured Stripe Payment Link opens external Stripe Checkout; confirm its test/live mode, currency, and $2.00 CAD price in Stripe before sharing it. After Stripe redirects back, this browser restores a local flag preview. This static site cannot verify payment, provide server-backed access, or sync the photo to other devices.'
+      : 'The Stripe Payment Link is not configured yet. Photos can be saved as local demo flags in this browser; no payment is collected.';
     const backdrop = document.createElement('div');
     backdrop.className = 'about-dialog-backdrop';
     backdrop.hidden = true;
@@ -72,9 +77,9 @@ export class BookingUI {
         <div class="about-dialog__grid">
           <article><h3>Views</h3><p>Arena Overview, Exterior View, and Ice Level with a 360° view from above the ice. Walk / Jump Mode is available on desktop.</p></article>
           <article><h3>Make it yours</h3><p>Switch between Jets Classic and Cyber Neon, then choose Lite, Standard, or Ultra to balance visual detail and performance.</p></article>
-          <article><h3>Fan Flags</h3><p>Add a photo flag to a selected seat. Flags are saved in this browser on this device and remain visible in Lite mode. The $2 CAD price shown is a demo; no payment is collected.</p></article>
+          <article><h3>Fan Flags</h3><p>Add a photo flag to a selected seat. Flags are saved in this browser on this device and remain visible in Lite mode. ${paymentDescription}</p></article>
         </div>
-        <p class="about-dialog__disclaimer"><strong>Ticketing notice:</strong> This project is not an official box office and does not sell or reserve tickets. Official ticket purchases are completed with third-party ticket operators through outbound links. Seat prices shown here are estimates; confirm event, price, fees, and availability with the ticket operator.</p>
+        <p class="about-dialog__disclaimer"><strong>Payment and ticketing notice:</strong> This project is not an official box office and does not sell or reserve tickets. Official ticket purchases use third-party ticket operators. Fan-flag payment, when configured, opens external Stripe Checkout. The browser-only project does not verify Stripe payments or provide server-backed fulfillment; saved fan photos stay on this device. Seat prices are estimates; confirm event, price, fees, and availability with the ticket operator.</p>
         <p class="about-dialog__footnote">An independent fan experience. Not affiliated with or endorsed by Canada Life Centre, True North Sports + Entertainment, the NHL, or the Winnipeg Jets.</p>
       </section>
     `;
@@ -286,6 +291,13 @@ export class BookingUI {
       thumb.alt = 'Photo displayed on a fan flag';
       el.appendChild(thumb);
 
+      const paymentStatus = document.createElement('p');
+      paymentStatus.className = 'seat-card__photo-notice';
+      paymentStatus.textContent = STRIPE_FAN_FLAG_PAYMENT_CONFIGURED
+        ? 'Local flag display only. Stripe payment is not verified by this site.'
+        : 'Stored in this browser. This site has no payment record for this flag.';
+      el.appendChild(paymentStatus);
+
       const actions = document.createElement('div');
       actions.className = 'seat-card__photo-actions';
 
@@ -308,13 +320,17 @@ export class BookingUI {
       el.classList.remove('has-photo');
       const notice = document.createElement('p');
       notice.className = 'seat-card__photo-notice';
-      notice.textContent = 'Add your photo to a fan flag at this seat for $2.00 CAD (demo, no payment).';
+      notice.textContent = STRIPE_FAN_FLAG_PAYMENT_CONFIGURED
+        ? 'Choose a photo to prepare a $2.00 CAD Stripe checkout. After returning, this browser restores a local flag preview; payment is not verified here.'
+        : 'Add a local demo fan flag at this seat for $2.00 CAD. No payment is collected until a Stripe link is configured.';
       el.appendChild(notice);
 
       const addBtn = document.createElement('button');
       addBtn.type = 'button';
       addBtn.className = 'btn btn--primary btn--small';
-      addBtn.textContent = 'Add Your Photo \u2014 $2.00 CAD';
+      addBtn.textContent = STRIPE_FAN_FLAG_PAYMENT_CONFIGURED
+        ? 'Choose Photo & Pay $2.00 CAD'
+        : 'Save Local Demo Photo';
       addBtn.addEventListener('click', () => this.handlePhotoUpload(info));
       el.appendChild(addBtn);
     }
@@ -340,15 +356,30 @@ export class BookingUI {
           this.showNotice(result.message || 'Could not process that photo.', 'warning');
           return;
         }
-        const saveResult = this.handlers.onSavePhoto(
-          { seatId: info.seatId, section: info.section, row: info.row, seat: info.seat },
-          result.dataUrl
-        );
+        const target = { seatId: info.seatId, section: info.section, row: info.row, seat: info.seat };
+        if (!info.billboard) {
+          const checkout = this.handlers.onCheckoutPhoto(target, result.dataUrl);
+          if (checkout && checkout.configured) {
+            if (checkout.ok === false || !checkout.url) {
+              this.showNotice(checkout.message || 'Could not start Stripe checkout.', 'warning');
+              return;
+            }
+            this.showNotice('Photo prepared. Opening external Stripe Checkout\u2026', 'info');
+            window.location.assign(checkout.url);
+            return;
+          }
+        }
+        const saveResult = this.handlers.onSavePhoto(target, result.dataUrl);
         if (saveResult && saveResult.ok === false) {
           this.showNotice(saveResult.message || 'Could not save the photo.', 'warning');
           return;
         }
-        this.showNotice('Fan flag photo saved (demo).', 'success');
+        this.showNotice(
+          STRIPE_FAN_FLAG_PAYMENT_CONFIGURED
+            ? 'Fan flag saved locally on this device. Payment is not verified by this site.'
+            : 'Fan flag saved locally as a demo. No payment was collected.',
+          'success'
+        );
       } finally {
         this._uploading = false;
       }
@@ -399,8 +430,9 @@ export class BookingUI {
     const fields = this.billboardPanel.fields;
 
     if (summary && summary.count > 0) {
-      fields.summary.textContent =
-        summary.count + ' \u00d7 ' + formatCad(summary.unitPrice) + ' = ' + formatCad(summary.total) + ' (demo)';
+      fields.summary.textContent = STRIPE_FAN_FLAG_PAYMENT_CONFIGURED
+        ? summary.count + (summary.count === 1 ? ' fan flag saved locally. Payment is not verified here.' : ' fan flags saved locally. Payment is not verified here.')
+        : summary.count + (summary.count === 1 ? ' local demo flag saved. No payment collected.' : ' local demo flags saved. No payment collected.');
     } else {
       fields.summary.textContent = 'No fan flags yet. Select a seat to add one.';
     }

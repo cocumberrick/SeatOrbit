@@ -18,7 +18,7 @@ This is a fan-made visual model, not an official Canada Life Centre product or a
 - **Arena styles:** Jets Classic and Cyber Neon.
 - **Quality levels:** Lite, Standard, and Ultra. Device detection selects a starting level; Ultra asks for confirmation before activation.
 - **Seat exploration:** browse sections and seats, preview the view, and see an estimated price. Prices are illustrative estimates in CAD, not live listings or seat availability.
-- **Fan Flags:** attach a compressed photo to a seat. Photos are stored locally in this browser under the seat's stable ID; they are not uploaded to a server and are not shared between devices. Saved flags remain visible in Lite mode. The displayed $2 CAD price is a demo value; no payment is collected.
+- **Fan Flags:** attach a compressed photo to a seat. Photos stay in this browser's existing seat-ID store with section, row, and seat metadata, and remain visible in Lite mode. Stripe reconciliation uses the matching stable `section_row_seat` key. An optional public Payment Link can be configured for the $2.00 CAD slot. This static client restores a local preview after Stripe redirects back but cannot verify payment or provide server-backed fulfillment. Without a configured link, saving remains a clearly labeled local demo and collects no payment.
 - **Ticket links:** the seat and section cards use one validated HTTPS link from `VITE_TICKETMASTER_URL`. The app does not sell or reserve tickets. Purchases are completed with the external ticket operator.
 - **Ticketmaster Discovery adapter:** a prepared client can search Winnipeg Jets hockey events or load a configured event ID. Discovery API prices are event-level ranges, not individual seat prices or inventory.
 
@@ -42,9 +42,9 @@ npm run preview
 
 ## Static deployment
 
-GitHub Pages is prepared through `.github/workflows/deploy-pages.yml`. Push to `main` (or run the workflow manually), then set the repository's Pages source to **GitHub Actions**. The Vite base path is derived from `GITHUB_REPOSITORY` for repository Pages sites, and is `/` for `username.github.io` sites. Set `VITE_BASE_PATH` only when a custom path is needed.
+GitHub Pages is prepared through `.github/workflows/deploy-pages.yml`. Set the repository's Pages source to **GitHub Actions**, then push to `main` (or run the workflow manually). If the first run reports that the Pages site was not found, initialize it under **Settings → Pages** by selecting **GitHub Actions**. The workflow can also enable Pages on the first run when a repository secret named `PAGES_ENABLEMENT_TOKEN` is configured. A fine-grained token for this setup needs **Pages: read and write** and **Administration: read and write**, restricted to this repository; revoke the token after Pages is initialized. Never commit or expose it. The Vite base path is derived from `GITHUB_REPOSITORY` for repository Pages sites, and is `/` for `username.github.io` sites. Set `VITE_BASE_PATH` only when a custom path is needed.
 
-For Vercel or Netlify, use `npm run build` as the build command and `dist` as the output directory. The app has no client-side URL routes, so the root document works on refresh without a rewrite rule. Configure any `VITE_TICKETMASTER_*` build variables in the host's project settings; the Pages workflow reads the matching GitHub Actions repository variables and `VITE_TICKETMASTER_API_KEY` secret. The Discovery consumer key is embedded in public client code by Vite, so use only a key intended for browser use.
+For Vercel or Netlify, use `npm run build` as the build command and `dist` as the output directory. The app has no client-side URL routes, so the root document works on refresh without a rewrite rule. Configure any `VITE_TICKETMASTER_*` build variables in the host's project settings; the Pages workflow reads the matching GitHub Actions repository variables and `VITE_TICKETMASTER_API_KEY` secret. Add the public Stripe URL as the GitHub Actions repository variable `VITE_STRIPE_FAN_FLAG_PAYMENT_URL` for Pages. The Discovery consumer key is embedded in public client code by Vite, so use only a key intended for browser use.
 
 ## Ticketing configuration
 
@@ -56,10 +56,13 @@ VITE_TICKETMASTER_EVENT_ID=
 VITE_TICKETMASTER_VENUE_ID=
 VITE_TICKETMASTER_VENUE_NAME=Canada Life Centre
 VITE_TICKETMASTER_URL=
+VITE_STRIPE_FAN_FLAG_PAYMENT_URL=
 VITE_BASE_PATH=
 ```
 
 Restart Vite after changing `.env`. Only use a public Discovery API consumer key for `VITE_TICKETMASTER_API_KEY`: Vite embeds `VITE_*` variables in browser code. Never put private or secret credentials in this file. `VITE_TICKETMASTER_URL` must be the HTTPS destination approved for the project's affiliate account. Without a configured referral URL, ticket buttons remain present but disabled with a clear message; the scene and estimated seat data continue to work without an API.
+
+For fan flags, set `VITE_STRIPE_FAN_FLAG_PAYMENT_URL` to the HTTPS Stripe Payment Link configured for a one-time $2.00 CAD purchase. In the Stripe Dashboard, set its after-payment behavior to redirect to the deployed app root with `?fan_flag_return=1&session_id={CHECKOUT_SESSION_ID}`. For local checkout, use a separate test-mode link and a localhost return URL. The app appends the selected stable `section_row_seat` key as Stripe's `client_reference_id` for reconciliation. The return flow only restores the compressed image as a local browser display: a static site cannot securely verify a Checkout Session. Before treating this as a real paid feature, connect Stripe webhooks to a serverless/backend endpoint, verify completed sessions there, and store entitlements server-side. Never expose a Stripe secret key in a `VITE_*` variable.
 
 The adapter is in `src/services/ticketmasterClient.js`; its functions are `searchWinnipegJetsEvents()` and `getTicketmasterEvent(eventId)`. The API adapter is prepared independently from the current seat estimate model: it does not write event-wide price ranges into individual `seatData` records and does not claim to provide per-seat availability. Affiliate attribution requires separate account approval and a valid issued link.
 

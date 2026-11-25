@@ -40,6 +40,29 @@ export function createSeatPalette(colors) {
   };
 }
 
+function createSeatMaterial() {
+  const material = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  const distanceSoftening = { value: 0 };
+  material.userData.seatDistanceSoftening = distanceSoftening;
+  material.onBeforeCompile = function (shader) {
+    shader.uniforms.uSeatDistanceSoftening = distanceSoftening;
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <common>',
+      '#include <common>\nuniform float uSeatDistanceSoftening;'
+    );
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <color_fragment>',
+      `#include <color_fragment>
+      float seatColorPeak = max(max(diffuseColor.r, diffuseColor.g), diffuseColor.b);
+      float seatAccent = smoothstep(0.24, 0.62, seatColorPeak);
+      float seatSoften = uSeatDistanceSoftening * (1.0 - seatAccent);
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.18, 0.21, 0.25), seatSoften);`
+    );
+  };
+  material.customProgramCacheKey = function () { return 'arena-seat-distance-softening-v1'; };
+  return material;
+}
+
 /* ----------------------------------------------------------------- geometry */
 
 export function createLowPolySeatGeometry() {
@@ -236,7 +259,7 @@ export class SeatLayoutBuilder {
     this.highWater = 0;
 
     this.geometry = o.geometry || createLowPolySeatGeometry();
-    this.material = o.material || new THREE.MeshLambertMaterial({ color: 0xffffff });
+    this.material = o.material || createSeatMaterial();
     this.mesh = new THREE.InstancedMesh(this.geometry, this.material, this.capacity);
     this.mesh.name = this.name;
     this.mesh.castShadow = false;

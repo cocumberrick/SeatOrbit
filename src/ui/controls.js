@@ -91,6 +91,7 @@ export function createUI(args) {
   rightTools.appendChild(billboardBtn);
 
   const aboutBtn = document.createElement('button');
+  aboutBtn.className = 'toolbar-about';
   aboutBtn.textContent = 'About';
   aboutBtn.addEventListener('click', function () { onOpenAbout(aboutBtn); });
   rightTools.appendChild(aboutBtn);
@@ -130,7 +131,13 @@ export function createUI(args) {
   const deviceNotice = document.createElement('span');
   deviceNotice.className = 'device-tier-note';
   deviceNotice.setAttribute('role', 'status');
-  deviceNotice.textContent = initialDeviceNotice;
+  deviceNotice.textContent = initialDeviceNotice === 'Lite auto-selected for this device'
+    ? 'Auto: Lite'
+    : initialDeviceNotice;
+  if (initialDeviceNotice) {
+    deviceNotice.title = initialDeviceNotice;
+    deviceNotice.setAttribute('aria-label', initialDeviceNotice);
+  }
   deviceNotice.hidden = !initialDeviceNotice;
 
   let currentSceneMode = initialSceneMode;

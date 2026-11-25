@@ -7,11 +7,13 @@ import { createEnvironment } from './scene/createEnvironment.js';
 import { createLighting } from './scene/createLighting.js';
 import { flyTo, cancelFlight, isCameraFlightActive, setTargetAheadOfCamera, clampWalkCamera, clampCameraForMode } from './scene/cameraController.js';
 import { createStadium } from './stadium/createStadium.js';
-import { computeSectionBounds } from './stadium/seatLayout.js';
+import { computeSectionBounds, seatKey } from './stadium/seatLayout.js';
 import { getTierBackOval, getTierLayouts } from './stadium/arenaHelpers.js';
 import { createUI } from './ui/controls.js';
 import { BookingUI } from './ui/bookingUI.js';
 import { photoBillboardsStore } from './state/photoBillboardsStore.js';
+import { savePendingFanFlagCheckout, takePendingFanFlagCheckout } from './state/pendingFanFlagCheckout.js';
+import { getFanFlagPaymentUrl, STRIPE_FAN_FLAG_PAYMENT_CONFIGURED } from './config/fanFlagPaymentConfig.js';
 import { getTicketUrl } from './config/ticketingConfig.js';
 import { detectDeviceTier } from './utils/deviceTier.js';
 import { QUALITY_MODE, normalizeQualityMode } from './config/renderQuality.js';
@@ -123,6 +125,9 @@ function init() {
     const seatMesh = stadium.getObjectByName('Seats');
     const bowl = stadium.getObjectByName('Bowl');
     if (!seatMesh) throw new Error('Seat mesh not found in the stadium.');
+    const seatDistanceSoftening = seatMesh.material && seatMesh.material.userData
+      ? seatMesh.material.userData.seatDistanceSoftening
+      : null;
 
     const controller = seatMesh.userData.seatLayout;
     if (!controller) throw new Error('SeatLayoutBuilder is not attached to the seat mesh.');
@@ -308,6 +313,7 @@ function init() {
     const booking = new BookingUI(container, {
       onCloseSeatCard: clearSelection,
       onSavePhoto: savePhoto,
+      onCheckoutPhoto: beginFanFlagCheckout,
       onRemovePhoto: removePhoto,
       onViewIn3D: viewSeatIn3D,
       onTicketsClick: onTicketsClick,
@@ -422,6 +428,61 @@ function init() {
           );
       requestRender();
       return result;
+    }
+
+    function beginFanFlagCheckout(target, dataUrl) {
+      if (!STRIPE_FAN_FLAG_PAYMENT_CONFIGURED) return { configured: false };
+      const seat = seatData[target.seatId];
+      if (!seat || seat.active === false) {
+        return { configured: true, ok: false, message: 'Seat not found. Select the seat again before starting checkout.' };
+      }
+      const referenceId = seatKey(seat.section, seat.row, seat.seat);
+      const paymentUrl = getFanFlagPaymentUrl(referenceId);
+      if (!paymentUrl) {
+        return { configured: true, ok: false, message: 'The Stripe Payment Link is not valid. Check VITE_STRIPE_FAN_FLAG_PAYMENT_URL and reload the site.' };
+      }
+      const savedDraft = savePendingFanFlagCheckout({
+        referenceId,
+        section: seat.section,
+        row: seat.row,
+        seat: seat.seat,
+        dataUrl
+      });
+      if (!savedDraft.ok) return { configured: true, ok: false, message: savedDraft.message };
+      return { configured: true, ok: true, url: paymentUrl };
+    }
+
+    function restoreFanFlagAfterStripeReturn() {
+      const returnUrl = new URL(window.location.href);
+      if (returnUrl.searchParams.get('fan_flag_return') !== '1' || !returnUrl.searchParams.get('session_id')) return;
+
+      const draft = takePendingFanFlagCheckout();
+      if (!draft) {
+        booking.showNotice('Stripe return detected, but this tab has no recent fan-flag photo to restore.', 'warning');
+      } else {
+        const expectedReference = seatKey(draft.section, draft.row, draft.seat);
+        const seatId = expectedReference === draft.referenceId
+          ? seatByLabel.get(seatLabelKey(draft.section, draft.row, draft.seat))
+          : undefined;
+        const seat = seatId === undefined ? null : seatData[seatId];
+        if (!seat || seat.active === false) {
+          booking.showNotice('The selected seat could not be matched after returning. Your photo draft was not attached.', 'warning');
+        } else {
+          const result = photoBillboardsStore.get(seatId)
+            ? photoBillboardsStore.updateAvatar(seatId, draft.dataUrl)
+            : photoBillboardsStore.save({ seatId, section: seat.section, row: seat.row, seat: seat.seat }, draft.dataUrl);
+          if (result.ok) {
+            selectSeat(seatId);
+            booking.showNotice('Fan flag restored as a local display. This site cannot verify the Stripe payment.', 'info');
+          } else {
+            booking.showNotice(result.message || 'Could not restore the local fan-flag photo.', 'warning');
+          }
+        }
+      }
+
+      returnUrl.searchParams.delete('fan_flag_return');
+      returnUrl.searchParams.delete('session_id');
+      window.history.replaceState(window.history.state, '', returnUrl.pathname + returnUrl.search + returnUrl.hash);
     }
 
     function removePhoto(seatId) {
@@ -705,6 +766,7 @@ function init() {
     applyArenaStyle(DEFAULT_ARENA_STYLE);
     applySceneMode(DEFAULT_SCENE_MODE);
     initBillboards();
+    restoreFanFlagAfterStripeReturn();
 
     controls.addEventListener('start', cancelFlight);
 
@@ -1191,6 +1253,20 @@ function init() {
         clearSeatHover();
       }
 
+      if (seatDistanceSoftening) {
+        if (viewMode === VIEW.OVERVIEW && activePreset === 'overview') {
+          const dx = camera.position.x - controls.target.x;
+          const dy = camera.position.y - controls.target.y;
+          const dz = camera.position.z - controls.target.z;
+          const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+          const fadeT = Math.max(0, Math.min(1, (distance - 120) / 150));
+          const easedFade = fadeT * fadeT * (3 - 2 * fadeT);
+          const qualityFade = sceneMode === QUALITY_MODE.LITE ? 0.58 : 0.46;
+          seatDistanceSoftening.value = easedFade * qualityFade;
+        } else {
+          seatDistanceSoftening.value = 0;
+        }
+      }
       renderer.render(scene, camera);
       fpsFrames++;
       if (now - fpsWindowStart >= 500) {
